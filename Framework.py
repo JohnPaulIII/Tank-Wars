@@ -1,4 +1,5 @@
 from Tank import Tank
+from Wall import Wall
 import asyncio
 import discord
 import cv2
@@ -32,8 +33,8 @@ class GameCommands:
         self.logrootfile = str(int(gamechannel.id)) + "_"
         self.gamenum = 0
         self.debug = True
-        if not path.exists(self.dir_path + "/" + str(int(self.gamechannel.id))):
-            os.mkdir(self.dir_path + "/" + str(int(self.gamechannel.id)))
+        if not path.exists(os.path.join(self.dir_path, str(int(self.gamechannel.id)))):
+            os.mkdir(os.path.join(self.dir_path, str(int(self.gamechannel.id))))
 
     def getStatus(self):
         return (self.gamenum, self.gamechannel, self.gamestage)
@@ -140,10 +141,10 @@ class GameCommands:
 
     async def buildImage(self):
         image = self.buildraw()
-        cv2.imwrite(self.dir_path + "/" + str(int(self.gamechannel.id)) + '/BattleGrid.jpg',image)
+        cv2.imwrite(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'BattleGrid.jpg'),image)
         if hasattr(self, 'GridImage'):
             await self.GridImage.delete()
-        self.GridImage = await self.gamechannel.send(file = discord.File(self.dir_path + "/" + str(int(self.gamechannel.id)) + '/BattleGrid.jpg'))
+        self.GridImage = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'BattleGrid.jpg')))
 
     async def newCommands(self, reactions):
         ctext = {
@@ -496,7 +497,7 @@ class GameCommands:
                 asyncio.ensure_future(message.add_reaction(emoji))
 
     async def generateintervalvideo(self):
-        self.video = cv2.VideoWriter(self.dir_path + "/" + str(int(self.gamechannel.id)) + "/BattleVid.mp4", cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
+        self.video = cv2.VideoWriter(os.path.join(self.dir_path, str(int(self.gamechannel.id)), "BattleVid.mp4"), cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
         self.buildframe()
         for message in self.commandmessages:
             self.addlog("NewCommands")
@@ -543,13 +544,13 @@ class GameCommands:
                 self.fullevents.append(self.events3)
         self.video.release()
         del self.video
-        newGridVideo = await self.gamechannel.send(file = discord.File(self.dir_path + "/" + str(int(self.gamechannel.id)) + '/BattleVid.mp4'))
+        newGridVideo = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'BattleVid.mp4')))
         if hasattr(self, 'GridVideo'):
             await self.GridVideo.delete()
         self.GridVideo = newGridVideo
 
     async def generatefullvideo(self):
-        self.video = cv2.VideoWriter(self.dir_path + "/" + str(int(self.gamechannel.id)) + "/BattleLog.mp4", cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
+        self.video = cv2.VideoWriter(os.path.join(self.dir_path, str(int(self.gamechannel.id)), "BattleLog.mp4"), cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
         self.buildframe2()
         for i in range(len(self.fullcommands)):
             setlist = self.fullcommands[i]
@@ -567,7 +568,7 @@ class GameCommands:
                 self.beginningGrid[user] = self.subShiftTanks(newtank, setlist[user])
         self.video.release()
         del self.video
-        await self.videochannel.send(file = discord.File(self.dir_path + "/" + str(int(self.gamechannel.id)) + '/BattleLog.mp4'))
+        await self.videochannel.send(file = discord.File(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'BattleLog.mp4')))
 
     def runCommand(self, tank, command, frame):
         if command == "Fire":
@@ -676,7 +677,7 @@ class GameCommands:
         self.explosions = []
 
     def buildraw(self):
-        img1 = cv2.imread(self.dir_path + r'/assets/Grid.jpg')
+        img1 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Grid.jpg'))
         for tank in self.tanklist.values():
             originx, originy = 95 + (60 * tank.x) + tank.xOffset, 90 + (60 * tank.y) + tank.yOffset
             self.addText(img1, tank.name.name, tank.color, originx, originy)
@@ -704,7 +705,7 @@ class GameCommands:
         self.explosions = []
 
     def buildraw2(self):
-        img1 = cv2.imread(self.dir_path + r'/assets/Grid.jpg')
+        img1 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Grid.jpg'))
         for tank in self.beginningGrid.values():
             originx, originy = 95 + (60 * tank.x) + tank.xOffset, 90 + (60 * tank.y) + tank.yOffset
             self.addText(img1, tank.name.name, tank.color, originx, originy)
@@ -743,13 +744,13 @@ class GameCommands:
             gridx -= 4
             gridy -= 33
             angletext = '000'
-        self.addlog("Query image: " + self.dir_path + r'/assets/Fire_{}_{}.jpg'.format(str(int(frame)), angletext))
-        img2 = cv2.imread(self.dir_path + r'/assets/Fire_{}_{}.jpg'.format(str(int(frame)), angletext))
+        self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Fire_{}_{}.jpg'.format(str(int(frame)), angletext)))
+        img2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Fire_{}_{}.jpg'.format(str(int(frame)), angletext)))
         self.addImage(img1, img2, gridx, gridy, 200)
 
     def addExplosion(self, img1, gridx, gridy, frame):
-        self.addlog("Query image: " + self.dir_path + r'/assets/Explosion_{}.jpg'.format(str(int(frame))))
-        img2 = cv2.imread(self.dir_path + r'/assets/Explosion_{}.jpg'.format(str(int(frame))))
+        self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Explosion_{}.jpg'.format(str(int(frame)))))
+        img2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Explosion_{}.jpg'.format(str(int(frame)))))
         self.addImage(img1,img2,gridx,gridy)
 
     def addTank(self, img1, gridx, gridy, angle1d, angle2d, color, dead):
@@ -778,16 +779,16 @@ class GameCommands:
         while len(angle2) < 3:
             angle2 = '0' + angle2
         if dead:
-            self.addlog("Query image: " + self.dir_path + r'/assets/Tank_Base_Dead{}.jpg'.format(angle1))
-            self.addlog("Query image: " + self.dir_path + r'/assets/Tank_Turrent_Dead{}.jpg'.format(angle2))
-            img2 = cv2.imread(self.dir_path + r'/assets/Tank_Base_Dead{}.jpg'.format(angle1))
-            img3 = cv2.imread(self.dir_path + r'/assets/Tank_Turrent_Dead{}.jpg'.format(angle2))
+            self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Tank_Base_Dead{}.jpg'.format(angle1)))
+            self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Tank_Turrent_Dead{}.jpg'.format(angle2)))
+            img2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Base_Dead{}.jpg'.format(angle1)))
+            img3 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Turrent_Dead{}.jpg'.format(angle2)))
             threshold = 180
         else:
-            self.addlog("Query image: " + self.dir_path + r'/assets/Tank_Base_{}{}.jpg'.format(color, angle1))
-            self.addlog("Query image: " + self.dir_path + r'/assets/Tank_Turrent_{}{}.jpg'.format(color, angle2))
-            img2 = cv2.imread(self.dir_path + r'/assets/Tank_Base_{}{}.jpg'.format(color, angle1))
-            img3 = cv2.imread(self.dir_path + r'/assets/Tank_Turrent_{}{}.jpg'.format(color, angle2))
+            self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Tank_Base_{}{}.jpg'.format(color, angle1)))
+            self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Tank_Turrent_{}{}.jpg'.format(color, angle2)))
+            img2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Base_{}{}.jpg'.format(color, angle1)))
+            img3 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Turrent_{}{}.jpg'.format(color, angle2)))
             threshold = 140
         if rev1:
             img2 = cv2.flip(img2,1)
@@ -808,7 +809,7 @@ class GameCommands:
 
     def addImage(self, img1, img2, originx, originy, thresholdnum = 140):
         rows,cols = img2.shape[:2]
-        offsetx, offsety = originx - int(rows/2), originy - int(cols/2)
+        offsetx, offsety = originx - int(rows / 2), originy - int(cols / 2)
         roi = img1[offsety:rows + offsety, offsetx:cols + offsetx]
 
         # Now create a mask of logo and create its inverse mask also
