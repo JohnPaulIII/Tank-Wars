@@ -34,6 +34,8 @@ class GameCommands:
         self.logrootfile = str(int(gamechannel.id)) + "_"
         self.gamenum = 0
         self.debug = True
+        self.verticalwalls = {}
+        self.horizontalwalls = {}
         if not path.exists(os.path.join(self.dir_path, str(int(self.gamechannel.id)))):
             os.mkdir(os.path.join(self.dir_path, str(int(self.gamechannel.id))))
         self.buildGrid()
@@ -98,6 +100,8 @@ class GameCommands:
             for j in range(0, self.maxY - 1):
                 y = 90 * j + 188
                 gridimage[y:(y + 90), x:(x + 90)] = currimage
+
+        self.addAllWalls(gridimage)
 
         cv2.imwrite(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'Grid.jpg'), gridimage)
 
@@ -431,25 +435,53 @@ class GameCommands:
             if y == 0:
                 bump = True
             else:
-                y -= 1
+                currcoords = '{},{}'.format(str(int(x)),str(int(y - 1)))
+                if currcoords in self.horizontalwalls.keys():
+                    if self.horizontalwalls[currcoords].active:
+                        bump = True
+                    else:
+                        y -= 1
+                else:
+                    y -= 1
         elif rotation == 90:
             if x == self.maxX:
                 bump = True
             else:
-                x += 1
+                currcoords = '{},{}'.format(str(int(x)),str(int(y)))
+                if currcoords in self.verticalwalls.keys():
+                    if self.verticalwalls[currcoords].active:
+                        bump = True
+                    else:
+                        x += 1
+                else:
+                    x += 1
         elif rotation == 180:
             if y == self.maxY:
                 bump = True
             else:
-                y += 1
+                currcoords = '{},{}'.format(str(int(x)),str(int(y)))
+                if currcoords in self.horizontalwalls.keys():
+                    if self.horizontalwalls[currcoords].active:
+                        bump = True
+                    else:
+                        y += 1
+                else:
+                    y += 1
         elif rotation == 270:
             if x == 0:
                 bump = True
             else:
-                x -= 1
+                currcoords = '{},{}'.format(str(int(x - 1)),str(int(y)))
+                if currcoords in self.verticalwalls.keys():
+                    if self.verticalwalls[currcoords].active:
+                        bump = True
+                    else:
+                        x -= 1
+                else:
+                    x -= 1
         else:
             bump = True
-        newcoords = str(int(x)) + "," + str(int(y))
+        newcoords = '{},{}'.format(str(int(x)),str(int(y)))
         if bump:
             if newset == 1:
                 del self.set1[user]
@@ -481,18 +513,26 @@ class GameCommands:
             kill = 1
         if rotation == 90:
             direction = (1, 0)
+            vertcheck = True
+            subcheck = False
         elif rotation == 180:
             direction = (0, 1)
+            vertcheck = False
+            subcheck = False
         elif rotation == 270:
             direction = (-1, 0)
+            vertcheck = True
+            subcheck = True
         else:
             direction = (0, -1)
+            vertcheck = False
+            subcheck = True
         x, y = x + direction[0], y + direction[1]
-        hit = False
+        hit = self.checkWalls(x, y, vertcheck, subcheck)
         if kill == 1:
             #print('trigger1')
             while self.inbounds(x, y) and not hit:
-                newcoords = str(int(x)) + "," + str(int(y))
+                newcoords = '{},{}'.format(str(int(x)), str(int(y)))
                 if newcoords in self.coords1:
                     for tank in self.coords1[newcoords]:
                         if not self.tanklist[tank[0]].dead:
@@ -504,10 +544,11 @@ class GameCommands:
                             hit = True
                 else:
                     x, y = x + direction[0], y + direction[1]
+                    hit = self.checkWalls(x, y, vertcheck, subcheck)
         if kill == 2:
             #print('trigger2')
             while self.inbounds(x, y) and not hit:
-                newcoords = str(int(x)) + "," + str(int(y))
+                newcoords = '{},{}'.format(str(int(x)), str(int(y)))
                 if newcoords in self.coords2:
                     for tank in self.coords2[newcoords]:
                         if not self.tanklist[tank[0]].dead:
@@ -519,10 +560,11 @@ class GameCommands:
                             hit = True
                 else:
                     x, y = x + direction[0], y + direction[1]
+                    hit = self.checkWalls(x, y, vertcheck, subcheck)
         if kill == 3:
             #print('trigger3')
             while self.inbounds(x, y) and not hit:
-                newcoords = str(int(x)) + "," + str(int(y))
+                newcoords = '{},{}'.format(str(int(x)), str(int(y)))
                 if newcoords in self.coords3:
                     for tank in self.coords3[newcoords]:
                         if not self.tanklist[tank[0]].dead:
@@ -534,6 +576,28 @@ class GameCommands:
                             hit = True
                 else:
                     x, y = x + direction[0], y + direction[1]
+                    hit = self.checkWalls(x, y, vertcheck, subcheck)
+
+    def checkWalls(self, x, y, vertcheck, subcheck):
+        if self.inbounds(x, y):
+            if vertcheck:
+                if subcheck:
+                    x -= 1
+                newcoords = '{},{}'.format(str(int(x)), str(int(y)))
+                if newcoords in self.verticalwalls.keys():
+                    return self.verticalwalls[newcoords].active
+                else:
+                    return False
+            else:
+                if subcheck:
+                    y -= 1
+                newcoords = '{},{}'.format(str(int(x)), str(int(y)))
+                if newcoords in self.horizontalwalls.keys():
+                    return self.horizontalwalls[newcoords].active
+                else:
+                    return False
+        else:
+            return True
 
     def inbounds(self, x, y):
         return x >= 0 and y >= 0 and x <= self.maxX and y <= self.maxY
@@ -626,22 +690,22 @@ class GameCommands:
                 tank.fireframe = 0
         elif command == "Forward":
             if tank.rotation == 90:
-                tank.xOffset = self.frametranslation * frame
+                tank.xOffset = int(self.frametranslation * frame)
             elif tank.rotation == 180:
-                tank.yOffset = self.frametranslation * frame
+                tank.yOffset = int(self.frametranslation * frame)
             elif tank.rotation == 270:
-                tank.xOffset = -self.frametranslation * frame
+                tank.xOffset = -int(self.frametranslation * frame)
             else:
-                tank.yOffset = -self.frametranslation * frame
+                tank.yOffset = -int(self.frametranslation * frame)
         elif command == "Backward":
             if tank.rotation == 90:
-                tank.xOffset = -self.frametranslation * frame
+                tank.xOffset = -int(self.frametranslation * frame)
             elif tank.rotation == 180:
-                tank.yOffset = -self.frametranslation * frame
+                tank.yOffset = -int(self.frametranslation * frame)
             elif tank.rotation == 270:
-                tank.xOffset = self.frametranslation * frame
+                tank.xOffset = int(self.frametranslation * frame)
             else:
-                tank.yOffset = self.frametranslation * frame
+                tank.yOffset = int(self.frametranslation * frame)
         elif command == "CW":
             tank.rotationOffset = self.framerotation * frame
             tank.turrentOffset = self.framerotation * frame
@@ -854,6 +918,28 @@ class GameCommands:
         textx, texty = originx - int(textsize[0] / 2), originy + 35 + int(textsize[1] / 2)
         cv2.putText(img1, text, (textx, texty), font, fontscale, (255,255,255), thickness)
         #cv2.putText(img1, text, (textx, texty), font, fontscale, colorwheel[color], thickness)
+
+    def addAllWalls(self, img1):
+        vwalls = [Wall(4,0),Wall(0,1),Wall(8,1),Wall(1,2),Wall(7,2),Wall(1,3),Wall(7,3),Wall(2,4),Wall(6,4),Wall(2,5),Wall(6,5),Wall(1,6),Wall(7,6),Wall(1,7),Wall(7,7),Wall(0,8),Wall(8,8),Wall(4,9)]
+        hwalls = [Wall(0,4),Wall(1,0),Wall(1,8),Wall(2,1),Wall(2,7),Wall(3,1),Wall(3,7),Wall(4,2),Wall(4,6),Wall(5,2),Wall(5,6),Wall(6,1),Wall(6,7),Wall(7,1),Wall(7,7),Wall(8,0),Wall(8,8),Wall(9,4)]
+        for wall in vwalls:
+            self.addWall(img1, wall.x, wall.y, True)
+            self.verticalwalls['{},{}'.format(str(int(wall.x)), str(int(wall.y)))] = wall
+        for wall in hwalls:
+            self.addWall(img1, wall.x, wall.y, False)
+            self.horizontalwalls['{},{}'.format(str(int(wall.x)), str(int(wall.y)))] = wall
+
+    def addWall(self, img1, gridx, gridy, vertical):
+        if vertical:
+            img2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'BricksVertical.jpg'))
+            rows,cols = img2.shape[:2]
+            offsetx, offsety = gridx * 90 + 203 - int(rows / 2), gridy * 90 + 126 - int(cols / 2)
+            img1[offsety:rows + offsety, offsetx:cols + offsetx] = img2
+        else:
+            img2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'BricksHorizontal.jpg'))
+            rows,cols = img2.shape[:2]
+            offsetx, offsety = gridx * 90 + 126 - int(rows / 2), gridy * 90 + 203 - int(cols / 2)
+            img1[offsety:rows + offsety, offsetx:cols + offsetx] = img2
 
     def addImage(self, img1, img2, originx, originy, thresholdnum = 140):
         rows,cols = img2.shape[:2]
