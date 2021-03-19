@@ -18,7 +18,7 @@ def checkAdmin(ctx):
         if role.name == "Admin" or role.name == "Developers" or role.name == "Tank Beta Tester":
             return True
     return checkOwner(ctx)
-    
+
 def checkOwner(ctx):
     if ctx.author.id in [571867069214097423, 385044173289553920]:
         return True
@@ -181,7 +181,7 @@ async def on_ready():
     global tankgametasks
     global quickstarts
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Tank Wars"))
-    MAINCHANNEL = bot.get_channel(806287252279394325)
+    MAINCHANNEL = bot.get_channel(820511266715992064)
     grabbot = await MAINCHANNEL.send('Ready!')
     botuser = grabbot.author
     tankgames = {}

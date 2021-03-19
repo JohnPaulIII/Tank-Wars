@@ -3,6 +3,7 @@ from Wall import Wall
 import asyncio
 import discord
 import cv2
+import numpy as np
 from random import randrange
 import os
 import os.path
@@ -18,12 +19,12 @@ class GameCommands:
         self.maxX = 9
         self.maxY = 9
         self.fps = 24
-        self.height = 723
-        self.width = 723
-        self.gridsize = 60
+        self.gridsize = 90
+        self.height = self.gridsize * self.maxX + 285
+        self.width = self.gridsize * self.maxY + 285
         self.steps = 15
         self.fireframemax = 5
-        self.frametranslation = 4
+        self.frametranslation = self.gridsize / self.steps
         self.framerotation = 6
         self.coloremojis = ["\U0001F7E9","\U0001F7E6","\U0001F7E5"]
         self.commandemojis = ["\U0001F4A5", "\U000025C0", "\U0001F53C", "\U000025B6", "\U0001F53D"]
@@ -35,6 +36,7 @@ class GameCommands:
         self.debug = True
         if not path.exists(os.path.join(self.dir_path, str(int(self.gamechannel.id)))):
             os.mkdir(os.path.join(self.dir_path, str(int(self.gamechannel.id))))
+        self.buildGrid()
 
     def getStatus(self):
         return (self.gamenum, self.gamechannel, self.gamestage)
@@ -53,6 +55,51 @@ class GameCommands:
         self.startgamemessage = await self.gamechannel.send("React below to join the next game:")
         for emoji in self.coloremojis:
             await self.startgamemessage.add_reaction(emoji)
+
+    def buildGrid(self):
+        gridimage = np.zeros((self.height, self.width, 3), np.uint8)
+        gridimage[:] = (31, 73, 115)
+
+        x, y = 86, 86
+        gridimage[y:(y + 102), x:(x + 102)] = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tiles', 'TopLeft.jpg'))
+
+        x = 98 + (90 * self.maxX)
+        gridimage[y:(y + 102), x:(x + 101)] = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tiles', 'TopRight.jpg'))
+
+        y = 98 + (90 * self.maxY)
+        gridimage[y:(y + 101), x:(x + 101)] = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tiles', 'BottomRight.jpg'))
+
+        x = 86
+        gridimage[y:(y + 101), x:(x + 102)] = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tiles', 'BottomLeft.jpg'))
+
+        currimage1 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tiles', 'Top.jpg'))
+        currimage2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tiles', 'Bottom.jpg'))
+        y1, y2 = 86, 98 + (90 * self.maxY)
+        for i in range(0, self.maxX - 1):
+            x = 90 * i + 188
+            gridimage[y1:(y1 + 102), x:(x + 90)] = currimage1
+            gridimage[y2:(y2 + 101), x:(x + 90)] = currimage2
+
+        currimage1 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tiles', 'Left.jpg'))
+        currimage2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tiles', 'Right.jpg'))
+        x1, x2 = 86, 98 + (90 * self.maxX)
+        for i in range(0, self.maxY - 1):
+            y = 90 * i + 188
+            gridimage[y:(y + 90), x1:(x1 + 102)] = currimage1
+            gridimage[y:(y + 90), x2:(x2 + 101)] = currimage2
+
+        del currimage1
+        del currimage2
+
+        currimage = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tiles', 'Center.jpg'))
+        x, y = 188, 188
+        for i in range(0, self.maxX - 1):
+            x = 90 * i + 188
+            for j in range(0, self.maxY - 1):
+                y = 90 * j + 188
+                gridimage[y:(y + 90), x:(x + 90)] = currimage
+
+        cv2.imwrite(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'Grid.jpg'), gridimage)
 
     async def checkPlayerCount(self):
         reactionset = await self.gamechannel.fetch_message(self.startgamemessage.id)
@@ -246,12 +293,13 @@ class GameCommands:
                     self.currentcommands[user].fire = False
         self.killed = []
         for user, tankcommands in self.currentcommands.items():
-            if not (tankcommands.command == "Wait" or tankcommands.fire):
-                self.addlog(user + " Command1-1")
-                self.set1[user] = tankcommands.command
-                if tankcommands.command == "Forward" or tankcommands.command == "Backward":
-                    self.addlog(user + " Command1-2")
-                    self.movetank(user, tankcommands.command)
+            if not (self.tanklist[user].dead or self.tanklist[user].nowdead):
+                if not (tankcommands.command == "Wait" or tankcommands.fire):
+                    self.addlog(user + " Command1-1")
+                    self.set1[user] = tankcommands.command
+                    if tankcommands.command == "Forward" or tankcommands.command == "Backward":
+                        self.addlog(user + " Command1-2")
+                        self.movetank(user, tankcommands.command)
         solved = False
         while not solved:
             #print('trigger6')
@@ -677,19 +725,19 @@ class GameCommands:
         self.explosions = []
 
     def buildraw(self):
-        img1 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Grid.jpg'))
+        img1 = cv2.imread(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'Grid.jpg'))
         for tank in self.tanklist.values():
-            originx, originy = 95 + (60 * tank.x) + tank.xOffset, 90 + (60 * tank.y) + tank.yOffset
+            originx, originy = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset
             self.addText(img1, tank.name.name, tank.color, originx, originy)
         for tank in self.tanklist.values():
-            originx, originy, rotation, turrent = 95 + (60 * tank.x) + tank.xOffset, 90 + (60 * tank.y) + tank.yOffset, tank.rotation + tank.rotationOffset, tank.turrent + tank.turrentOffset
+            originx, originy, rotation, turrent = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset, tank.rotation + tank.rotationOffset, tank.turrent + tank.turrentOffset
             self.addTank(img1, originx, originy, rotation, turrent, tank.color, tank.nowdead)
         for tank in self.tanklist.values():
-            originx, originy, turrent = 95 + (60 * tank.x) + tank.xOffset, 90 + (60 * tank.y) + tank.yOffset, tank.turrent + tank.turrentOffset
+            originx, originy, turrent = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset, tank.turrent + tank.turrentOffset
             if tank.fireframe > 0:
                 self.addFire(img1, originx, originy, turrent, tank.fireframe)
         for explosion in self.explosions:
-            newx, newy = 95 + (60 * explosion[0]), 90 + (60 * explosion[1])
+            newx, newy = 143 + (90 * explosion[0]), 141 + (90 * explosion[1])
             #print(newx, newy, explosion[2])
             self.addExplosion(img1, newx, newy, explosion[2])
         '''
@@ -705,19 +753,19 @@ class GameCommands:
         self.explosions = []
 
     def buildraw2(self):
-        img1 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Grid.jpg'))
+        img1 = cv2.imread(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'Grid.jpg'))
         for tank in self.beginningGrid.values():
-            originx, originy = 95 + (60 * tank.x) + tank.xOffset, 90 + (60 * tank.y) + tank.yOffset
+            originx, originy = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset
             self.addText(img1, tank.name.name, tank.color, originx, originy)
         for tank in self.beginningGrid.values():
-            originx, originy, rotation, turrent = 95 + (60 * tank.x) + tank.xOffset, 90 + (60 * tank.y) + tank.yOffset, tank.rotation + tank.rotationOffset, tank.turrent + tank.turrentOffset
+            originx, originy, rotation, turrent = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset, tank.rotation + tank.rotationOffset, tank.turrent + tank.turrentOffset
             self.addTank(img1, originx, originy, rotation, turrent, tank.color, tank.nowdead)
         for tank in self.beginningGrid.values():
-            originx, originy, turrent = 95 + (60 * tank.x) + tank.xOffset, 90 + (60 * tank.y) + tank.yOffset, tank.turrent + tank.turrentOffset
+            originx, originy, turrent = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset, tank.turrent + tank.turrentOffset
             if tank.fireframe > 0:
                 self.addFire(img1, originx, originy, turrent, tank.fireframe)
         for explosion in self.explosions:
-            newx, newy = 95 + (60 * explosion[0]), 90 + (60 * explosion[1])
+            newx, newy = 143 + (90 * explosion[0]), 141 + (90 * explosion[1])
             self.addExplosion(img1, newx, newy, explosion[2])
         '''
         if frame > 2 and frame < 8:
