@@ -31,13 +31,13 @@ class GameCommands:
         self.subcommandemojis = ["\U000025C0", "\U0001F53C", "\U000025B6", "\U0001F53D"]
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
         self.gamestage = 0
-        self.logrootfile = str(int(gamechannel.id)) + "_"
+        self.logrootfile = str(int(self.gamechannel.id))
         self.gamenum = 0
         self.debug = True
         self.verticalwalls = {}
         self.horizontalwalls = {}
-        if not path.exists(os.path.join(self.dir_path, str(int(self.gamechannel.id)))):
-            os.mkdir(os.path.join(self.dir_path, str(int(self.gamechannel.id))))
+        if not path.exists(os.path.join(self.dir_path, self.logrootfile)):
+            os.mkdir(os.path.join(self.dir_path, self.logrootfile))
         self.buildGrid()
 
     def getStatus(self):
@@ -45,14 +45,19 @@ class GameCommands:
 
     def addlog(self, text):
         if self.debug:
-            with open(self.logrootfile + str(self.gamenum) + ".txt", 'a') as gamefile:
+            with open(os.path.join(self.dir_path, self.logrootfile, self.logrootfile + "_" + str(self.gamenum) + ".txt"), 'a') as gamefile:
+                gamefile.write(text + " \n")
+
+    def adderrorlog(self, text):
+        if self.debug:
+            with open(os.path.join(self.dir_path, self.logrootfile, "Errorlog_" + str(self.gamenum) + ".txt"), 'a') as gamefile:
                 gamefile.write(text + " \n")
 
     async def newGame(self):
         if self.debug:
             self.gamenum += 1
-            if os.path.isfile(self.logrootfile + str(self.gamenum) + ".txt"):
-                os.remove(self.logrootfile + str(self.gamenum) + ".txt")
+            if os.path.isfile(self.logrootfile + "_" + str(self.gamenum) + ".txt"):
+                os.remove(self.logrootfile + "_" + str(self.gamenum) + ".txt")
         self.gamestage = 1
         self.startgamemessage = await self.gamechannel.send("React below to join the next game:")
         for emoji in self.coloremojis:
@@ -103,19 +108,23 @@ class GameCommands:
 
         self.addAllWalls(gridimage)
 
-        cv2.imwrite(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'Grid.jpg'), gridimage)
+        cv2.imwrite(os.path.join(self.dir_path, self.logrootfile, 'Grid.jpg'), gridimage)
 
     async def checkPlayerCount(self):
-        reactionset = await self.gamechannel.fetch_message(self.startgamemessage.id)
-        reactions = reactionset.reactions
-        fullList = []
-        for emoji in self.coloremojis:
-            for reaction in reactions:
-                if reaction.emoji == emoji:
-                    users = await reaction.users().flatten()
-                    for user in users:
-                        fullList.append(user.name)
-        return len(list(OrderedDict.fromkeys(fullList))) - 1
+        try:
+            reactionset = await self.gamechannel.fetch_message(self.startgamemessage.id)
+            reactions = reactionset.reactions
+            fullList = []
+            for emoji in self.coloremojis:
+                for reaction in reactions:
+                    if reaction.emoji == emoji:
+                        users = await reaction.users().flatten()
+                        for user in users:
+                            fullList.append(user.name)
+            return len(list(OrderedDict.fromkeys(fullList))) - 1
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as error:
+            self.adderrorlog(error.text)
+            return 0
 
     def getCommandMessages(self):
         if self.gamestage == 1:
@@ -192,10 +201,10 @@ class GameCommands:
 
     async def buildImage(self):
         image = self.buildraw()
-        cv2.imwrite(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'BattleGrid.jpg'),image)
+        cv2.imwrite(os.path.join(self.dir_path, self.logrootfile, 'BattleGrid.jpg'),image)
         if hasattr(self, 'GridImage'):
             await self.GridImage.delete()
-        self.GridImage = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'BattleGrid.jpg')))
+        self.GridImage = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, self.logrootfile, 'BattleGrid.jpg')))
 
     async def newCommands(self, reactions):
         ctext = {
@@ -332,7 +341,7 @@ class GameCommands:
                             self.coords2[coordnames[i]].remove((usertank.name.name, "Forward"))
                             self.coords3[coordnames[i]].remove((usertank.name.name, "Stay"))
         for user, tankcommands in self.currentcommands.items():
-            if not (self.tanklist[user].dead or self.tanklist[user].nowdead):
+            if not (self.tanklist[user].dead):
                 if (not tankcommands.command == "Wait") and tankcommands.fire:
                     if not tankcommands.command == "Forward":
                         if tankcommands.command == "Backward":
@@ -380,7 +389,7 @@ class GameCommands:
                             self.addToDictList("coords3", newcoords, (tank[0], "Stay"))
                             self.coords3[coordnames[i]].remove((usertank.name.name, "Forward"))
         for user, tankcommands in self.currentcommands.items():
-            if not (self.tanklist[user].dead or self.tanklist[user].nowdead):
+            if not (self.tanklist[user].dead):
                 if tankcommands.command == "Backward" and tankcommands.fire:
                     self.addlog(user + " Fire3")
                     self.checktankshot(user, tankcommands.command)
@@ -575,8 +584,8 @@ class GameCommands:
                             self.events3.append(("Death",tank[0]))
                             hit = True
                 else:
-                    x, y = x + direction[0], y + direction[1]
                     hit = self.checkWalls(x, y, vertcheck, subcheck)
+                    x, y = x + direction[0], y + direction[1]
 
     def checkWalls(self, x, y, vertcheck, subcheck):
         if self.inbounds(x, y):
@@ -609,7 +618,7 @@ class GameCommands:
                 asyncio.ensure_future(message.add_reaction(emoji))
 
     async def generateintervalvideo(self):
-        self.video = cv2.VideoWriter(os.path.join(self.dir_path, str(int(self.gamechannel.id)), "BattleVid.mp4"), cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
+        self.video = cv2.VideoWriter(os.path.join(self.dir_path, self.logrootfile, "BattleVid.mp4"), cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
         self.buildframe()
         for message in self.commandmessages:
             self.addlog("NewCommands")
@@ -656,13 +665,13 @@ class GameCommands:
                 self.fullevents.append(self.events3)
         self.video.release()
         del self.video
-        newGridVideo = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'BattleVid.mp4')))
+        newGridVideo = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, self.logrootfile, 'BattleVid.mp4')))
         if hasattr(self, 'GridVideo'):
             await self.GridVideo.delete()
         self.GridVideo = newGridVideo
 
     async def generatefullvideo(self):
-        self.video = cv2.VideoWriter(os.path.join(self.dir_path, str(int(self.gamechannel.id)), "BattleLog.mp4"), cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
+        self.video = cv2.VideoWriter(os.path.join(self.dir_path, self.logrootfile, "BattleLog.mp4"), cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
         self.buildframe2()
         for i in range(len(self.fullcommands)):
             setlist = self.fullcommands[i]
@@ -680,7 +689,7 @@ class GameCommands:
                 self.beginningGrid[user] = self.subShiftTanks(newtank, setlist[user])
         self.video.release()
         del self.video
-        await self.videochannel.send(file = discord.File(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'BattleLog.mp4')))
+        await self.videochannel.send(file = discord.File(os.path.join(self.dir_path, self.logrootfile, 'BattleLog.mp4')))
 
     def runCommand(self, tank, command, frame):
         if command == "Fire":
@@ -789,7 +798,7 @@ class GameCommands:
         self.explosions = []
 
     def buildraw(self):
-        img1 = cv2.imread(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'Grid.jpg'))
+        img1 = cv2.imread(os.path.join(self.dir_path, self.logrootfile, 'Grid.jpg'))
         for tank in self.tanklist.values():
             originx, originy = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset
             self.addText(img1, tank.name.name, tank.color, originx, originy)
@@ -817,7 +826,7 @@ class GameCommands:
         self.explosions = []
 
     def buildraw2(self):
-        img1 = cv2.imread(os.path.join(self.dir_path, str(int(self.gamechannel.id)), 'Grid.jpg'))
+        img1 = cv2.imread(os.path.join(self.dir_path, self.logrootfile, 'Grid.jpg'))
         for tank in self.beginningGrid.values():
             originx, originy = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset
             self.addText(img1, tank.name.name, tank.color, originx, originy)

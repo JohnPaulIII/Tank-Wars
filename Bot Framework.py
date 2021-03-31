@@ -94,59 +94,73 @@ async def failedstart(ctx):
 
 def tankstart(ctx, channel, settings):
     global tankgametasks
-    gameobject = asyncio.ensure_future(tankgameloop(ctx, channel, settings))
+    loop = asyncio.get_running_loop()
+    fut = loop.create_future()
+    gameobject = loop.create_task(tankgameloop(fut, ctx, channel, settings))
+    #gameobject = asyncio.ensure_future(tankgameloop(ctx, channel, settings))
     tankgametasks[channel.id] = gameobject
 
 
-async def tankgameloop(ctx, channel, settings):
-    global tankgames
-    minPlayers = int(settings[2])
-    maxWaittime = int(settings[3])
-    gameWaittime = int(settings[4])
-    pingback = await channel.send('Tank game started in channel {} with {} settings'.format(channel, len(settings)), delete_after = 5)
-    channels = await pingback.guild.fetch_channels()
-    for c in channels:
-        if c.id == int(settings[0]):
-            videochannel = c
-    gameobject = TankGame([pingback.author], pingback.channel, videochannel, settings[1])
-    tankgames[channel.id] = gameobject
-    while True:
-        await gameobject.newGame()
-        waittime = maxWaittime
-        while waittime > 0:
-            await asyncio.sleep(5)
-            count = await gameobject.checkPlayerCount()
-            if count < minPlayers:
-                waittime = maxWaittime
-                if 'waitmessage' in locals():
-                    await waitmessage.edit(content = 'Waiting for players ({}/{})...'.format(count, minPlayers))
-                else:
-                    waitmessage = await channel.send('Waiting for players ({}/{})...'.format(count, minPlayers))
-            else:
-                waittime -= 5
-                if 'waitmessage' in locals():
-                    await waitmessage.edit(content = 'Game will start in {} seconds'.format(waittime))
-                else:
-                    waitmessage = await channel.send('Game will start in {} seconds'.format(waittime))
-        await waitmessage.edit(content = 'Let The Games Begin!', delete_after = 5)
-        del waitmessage
-        await gameobject.gamesetup()
-        looper = False
-        while not looper:
-            waittime = gameWaittime
+async def tankgameloop(fut, ctx, channel, settings):
+    try:
+        global tankgames
+        minPlayers = int(settings[2])
+        maxWaittime = int(settings[3])
+        gameWaittime = int(settings[4])
+        pingback = await channel.send('Tank game started in channel {} with {} settings'.format(channel, len(settings)), delete_after = 5)
+        channels = await pingback.guild.fetch_channels()
+        for c in channels:
+            if c.id == int(settings[0]):
+                videochannel = c
+        gameobject = TankGame([pingback.author], pingback.channel, videochannel, settings[1])
+        tankgames[channel.id] = gameobject
+        while True:
+            await gameobject.newGame()
+            waittime = maxWaittime
             while waittime > 0:
                 await asyncio.sleep(5)
-                waittime -= 5
-                if 'waitmessage' in locals():
-                    await waitmessage.edit(content = 'Round will end in {} seconds'.format(waittime))
+                count = await gameobject.checkPlayerCount()
+                if count < minPlayers:
+                    waittime = maxWaittime
+                    if 'waitmessage' in locals():
+                        await waitmessage.edit(content = 'Waiting for players ({}/{})...'.format(count, minPlayers))
+                    else:
+                        waitmessage = await channel.send('Waiting for players ({}/{})...'.format(count, minPlayers))
                 else:
-                    waitmessage = await channel.send('Round will end in {} seconds'.format(waittime))
-            await waitmessage.edit(content = 'Calculating...')
-            looper = await gameobject.executeRound()
-            await waitmessage.delete()
+                    waittime -= 5
+                    if 'waitmessage' in locals():
+                        await waitmessage.edit(content = 'Game will start in {} seconds'.format(waittime))
+                    else:
+                        waitmessage = await channel.send('Game will start in {} seconds'.format(waittime))
+            await waitmessage.edit(content = 'Let The Games Begin!', delete_after = 5)
             del waitmessage
-        await asyncio.sleep(15)
-        await gameobject.endgameCleanup()
+            await gameobject.gamesetup()
+            looper = False
+            while not looper:
+                waittime = gameWaittime
+                while waittime > 0:
+                    await asyncio.sleep(5)
+                    waittime -= 5
+                    if 'waitmessage' in locals():
+                        await waitmessage.edit(content = 'Round will end in {} seconds'.format(waittime))
+                    else:
+                        waitmessage = await channel.send('Round will end in {} seconds'.format(waittime))
+                await waitmessage.edit(content = 'Calculating...')
+                looper = await gameobject.executeRound()
+                await waitmessage.delete()
+                del waitmessage
+            await asyncio.sleep(15)
+            await gameobject.endgameCleanup()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as error:
+        gameobject.adderrorlog(error.text)
+        gameobject.adderrorlog(str(error.status))
+        gameobject.adderrorlog(str(error.code))
+    except:
+        gameobject.adderrorlog("Error2")
+    finally:
+        gameobject.adderrorlog("Error2")
+        fut.set_result("Error1")
+
 
 @bot.command()
 async def test(ctx):

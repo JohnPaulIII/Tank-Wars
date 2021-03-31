@@ -1,0 +1,14 @@
+[Unit]
+Description=Tank Wars Discord Bot
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 -u "Bot Framework.py" &
+WorkingDirectory="/home/pi/Discord Bots"
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target
