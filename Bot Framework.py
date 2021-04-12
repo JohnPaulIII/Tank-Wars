@@ -4,12 +4,15 @@ import discord
 from discord.ext import commands
 import time
 import sys
-from Framework import GameCommands as TankGame
+from NewFramework import GameCommands as TankGame
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
 client = discord.Client()
-bot = commands.Bot(command_prefix="!GM ")
+if sys.platform.startswith('linux'):
+    bot = commands.Bot(command_prefix="!GM ")
+else:
+    bot = commands.Bot(command_prefix="!DM ")
 
 TOKEN = 'ODA2MjE5MjIxODg0NjAwMzMw.YBmQKQ.Tq5Iw5Hfua1O6PKGF5_FNhU7b1o'
 
@@ -24,7 +27,7 @@ def checkOwner(ctx):
         return True
     return False
 
-@bot.command()
+@bot.command(aliases = ['qs'])
 async def quickstart(ctx):
     if checkAdmin(ctx):
         global quickstarts
@@ -70,7 +73,7 @@ async def start(ctx, *settings):
             if settings[0] == gamelist[0]: #tanks - video channel, number of commands
                 tankstart(ctx, newchannel, settings[1:])
 
-@bot.command()
+@bot.command(aliases = ['eg'])
 async def endgame(ctx):
     if checkAdmin(ctx):
         global tankgametasks
@@ -134,7 +137,7 @@ async def tankgameloop(fut, ctx, channel, settings):
                         waitmessage = await channel.send('Game will start in {} seconds'.format(waittime))
             await waitmessage.edit(content = 'Let The Games Begin!', delete_after = 5)
             del waitmessage
-            await gameobject.gamesetup()
+            await gameobject.gamesetup2()
             looper = False
             while not looper:
                 waittime = gameWaittime
@@ -146,7 +149,7 @@ async def tankgameloop(fut, ctx, channel, settings):
                     else:
                         waitmessage = await channel.send('Round will end in {} seconds'.format(waittime))
                 await waitmessage.edit(content = 'Calculating...')
-                looper = await gameobject.executeRound()
+                looper = await gameobject.executeRound2()
                 await waitmessage.delete()
                 del waitmessage
             await asyncio.sleep(15)
@@ -184,6 +187,12 @@ async def channel(ctx):
         await ctx.send(MAINCHANNEL)
 
 @bot.command()
+async def server(ctx):
+    if checkAdmin(ctx):
+        await ctx.send(ctx.guild.id)
+        print(ctx.guild.id)
+
+@bot.command()
 async def ping(ctx):
     await ctx.send('Pong!')
 
@@ -201,7 +210,7 @@ async def on_ready():
     tankgames = {}
     tankgametasks = {}
     quickstarts = {
-        806287252279394325:["tanks", "813859705209225257", "2", "2", "15", "30"], 
+        806287252279394325:["tanks", "813859705209225257", "2", "2", "5", "30"], 
         816067342894759947:["tanks", "816067343058075718", "2", "2", "15", "30"], 
         819591197970530314:["tanks", "819591235295641650", "2", "3", "15", "30"]
         }
