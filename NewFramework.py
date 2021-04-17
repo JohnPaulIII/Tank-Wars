@@ -4,14 +4,13 @@ import asyncio
 import discord
 import cv2
 import numpy as np
+import pandas as pd
+import datetime
 from random import randrange
 import os
 import os.path
 from os import path
 from collections import OrderedDict
-
-    # Outside calls: init, getStatus, newGame, checkPlayerCount, gamesetup,
-    # executeRound, endgameCleanup
 
 class GameCommands:
     def __init__(self, userexemptionlist, gamechannel, videochannel, commandnumber):
@@ -59,19 +58,48 @@ class GameCommands:
         }
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
         self.gamestage = 0
-        self.rootfile = os.path.join("Servers", str(int(self.gamechannel.guild.id)), str(int(self.gamechannel.id)))
+        self.rootfile = os.path.join("Servers", str(int(self.gamechannel.guild.id)))
+        self.rootfile2 = os.path.join(self.rootfile, str(int(self.gamechannel.id)))
         self.gamenum = 0
         self.debug = True
         self.verticalwalls = {}
         self.horizontalwalls = {}
-        if not path.exists(os.path.join(self.dir_path, self.rootfile)):
-            if not path.exists(os.path.join(self.dir_path, "Servers", str(int(self.gamechannel.guild.id)))):
+        if not path.exists(os.path.join(self.dir_path, self.rootfile2)):
+            if not path.exists(os.path.join(self.dir_path, self.rootfile)):
                 if not path.exists(os.path.join(self.dir_path, "Servers")):
                     os.mkdir(os.path.join(self.dir_path, "Servers"))
-                os.mkdir(os.path.join(self.dir_path, "Servers", str(int(self.gamechannel.guild.id))))
-            os.mkdir(os.path.join(self.dir_path, self.rootfile))
-        print(self.rootfile)
+                os.mkdir(os.path.join(self.dir_path, self.rootfile))
+            os.mkdir(os.path.join(self.dir_path, self.rootfile2))
+        if not path.exists(os.path.join(self.dir_path, self.rootfile, 'pandaFiles')):
+            os.mkdir(os.path.join(self.dir_path, self.rootfile, 'pandaFiles'))
         self.buildGrid()
+
+    def getCommandMessages(self):
+        if self.gamestage == 1:
+            return ([self.startgamemessage], self.coloremojis)
+        elif self.gamestage == 2:
+            return (self.commandmessages, self.commandemojis)
+        else:
+            return ([],[])
+
+    async def checkReaction(self, reaction, user):
+        if self.gamestage == 1:
+            reactionset = await self.gamechannel.fetch_message(reaction.message.id)
+            reactions = reactionset.reactions
+            for react in reactions:
+                if not react.emoji == reaction.emoji:
+                    users = await react.users().flatten()
+                    if user in users:
+                        await react.remove(user)
+        elif self.gamestage == 2:
+            if not reaction.emoji == "\U0001F4A5":
+                reactionset = await self.gamechannel.fetch_message(reaction.message.id)
+                reactions = reactionset.reactions
+                for react in reactions:
+                    if not react.emoji == reaction.emoji and not react.emoji == "\U0001F4A5":
+                        users = await react.users().flatten()
+                        if user in users:
+                            await react.remove(user)
 
     def buildGrid(self):
         gridimage = np.zeros((self.height, self.width, 3), np.uint8)
@@ -118,7 +146,7 @@ class GameCommands:
 
         self.addAllWalls(gridimage)
 
-        cv2.imwrite(os.path.join(self.dir_path, self.rootfile, 'Grid.jpg'), gridimage)
+        cv2.imwrite(os.path.join(self.dir_path, self.rootfile2, 'Grid.jpg'), gridimage)
 
     def addAllWalls(self, img1):
         vwalls = [Wall(4,0),Wall(0,1),Wall(8,1),Wall(1,2),Wall(7,2),Wall(1,3),Wall(7,3),Wall(2,4),Wall(6,4),Wall(2,5),Wall(6,5),Wall(1,6),Wall(7,6),Wall(1,7),Wall(7,7),Wall(0,8),Wall(8,8),Wall(4,9)]
@@ -148,8 +176,8 @@ class GameCommands:
     async def newGame(self):
         if self.debug:
             self.gamenum += 1
-            if os.path.isfile(self.rootfile + "_" + str(self.gamenum) + ".txt"):
-                os.remove(self.rootfile + "_" + str(self.gamenum) + ".txt")
+            if os.path.isfile(os.path.join(self.rootfile2, str(int(self.gamechannel.id)) + "_" + str(self.gamenum) + ".txt")):
+                os.remove(os.path.join(self.rootfile2, str(int(self.gamechannel.id)) + "_" + str(self.gamenum) + ".txt"))
         self.gamestage = 1
         self.startgamemessage = await self.gamechannel.send("React below to join the next game:")
         for emoji in self.coloremojis:
@@ -172,6 +200,7 @@ class GameCommands:
             return 0
 
     async def gamesetup2(self):
+        self.addlog('Check1')
         self.gamestage = 2
         message = await self.gamechannel.fetch_message(self.startgamemessage.id)
         reactions = message.reactions
@@ -190,11 +219,20 @@ class GameCommands:
                         if not newrand in taken:
                             taken.append(newrand)
                             solved = True
+                    self.addlog('Check2')
+                    print(user.id)
+                    self.addlog(user.id)
                     rotation = int(randrange(0,360,90))
                     self.GameRounds[0].newtankpositions[newrand] = [user.name]
-                    self.tanklist[user.name] = Tank(x,y,rotation,rotation,user,colorset[react.emoji])
-                    self.beginningGrid[user.name] = Tank(x,y,rotation,rotation,user,colorset[react.emoji])
-        #self.tanklist = {"1":Tank(1,1,0,0,"1","Green"),"2":Tank(2,2,90,90,"2","Green"),"3":Tank(3,3,180,180,"3","Green"),"4":Tank(4,4,270,270,"4","Green")}
+                    self.addlog(user)
+                    self.addlog(user.id)
+                    usercontainer = await self.gamechannel.guild.fetch_member(user.id)
+                    displayname = ''.join(e for e in usercontainer.display_name if e.isalnum() or e == ' ')
+                    username = usercontainer.name + "#" + usercontainer.discriminator
+                    self.tanklist[user.name] = Tank(x, y, rotation, rotation, user, displayname, username, colorset[react.emoji])
+                    self.beginningGrid[user.name] = Tank(x, y, rotation, rotation, user, displayname, username, colorset[react.emoji])
+                    self.pandaCheckUser(username)
+                    self.addlog('Check3')
         await message.delete()
         for i in range(int(self.commandnumber)):
             newmessage = await self.gamechannel.send(self.make_ordinal(i + 1) + " Action")
@@ -221,10 +259,10 @@ class GameCommands:
 
     async def buildImage(self):
         image = self.buildraw()
-        cv2.imwrite(os.path.join(self.dir_path, self.rootfile, 'BattleGrid.jpg'),image)
+        cv2.imwrite(os.path.join(self.dir_path, self.rootfile2, 'BattleGrid.jpg'),image)
         if hasattr(self, 'GridImage'):
             await self.GridImage.delete()
-        self.GridImage = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, self.rootfile, 'BattleGrid.jpg')))
+        self.GridImage = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, self.rootfile2, 'BattleGrid.jpg')))
 
     def addText(self, img1, text, color, originx, originy):
         #colorwheel = {"Red":(44,31,120), "Green":(80,155,75), "Blue":(163,77,15)}
@@ -282,8 +320,8 @@ class GameCommands:
 
     def addlog(self, text):
         if self.debug:
-            with open(os.path.join(self.dir_path, self.rootfile, self.rootfile + "_" + str(self.gamenum) + ".txt"), 'a') as gamefile:
-                gamefile.write(text + " \n")
+            with open(os.path.join(self.dir_path, self.rootfile2, str(int(self.gamechannel.id)) + "_" + str(self.gamenum) + ".txt"), 'a') as gamefile:
+                gamefile.write(str(text) + " \n")
 
     def addFire(self, img1, gridx, gridy, angle, frame):
         if angle == 90:
@@ -334,8 +372,8 @@ class GameCommands:
 
     def adderrorlog(self, text):
         if self.debug:
-            with open(os.path.join(self.dir_path, self.rootfile, "Errorlog_" + str(self.gamenum) + ".txt"), 'a') as gamefile:
-                gamefile.write(text + " \n")
+            with open(os.path.join(self.dir_path, self.rootfile2, "Errorlog_" + str(self.gamenum) + ".txt"), 'a') as gamefile:
+                gamefile.write(str(text) + " \n")
 
     async def executeRound2(self):
         await self.generateintervalvideo2()
@@ -343,11 +381,13 @@ class GameCommands:
         alivetanks = []
         for tank in self.tanklist.values():
             if not tank.dead:
-                alivetanks.append(tank.name)
+                alivetanks.append(tank.username)
         if len(alivetanks) > 1:
             await self.clearReactions()
             await self.gamechannel.send(str(len(alivetanks)) + " tanks remain.", delete_after = 30)
         else:
+            if len(alivetanks) == 1:
+                self.pandaTankWin(alivetanks[0])
             self.finalmessage = await self.gamechannel.send('Game Over')
             await self.generatefullvideo2()
         return len(alivetanks) < 2
@@ -359,7 +399,7 @@ class GameCommands:
                 asyncio.ensure_future(message.add_reaction(emoji))
 
     async def generateintervalvideo2(self):
-        self.video = cv2.VideoWriter(os.path.join(self.dir_path, self.rootfile, "BattleVid.mp4"), cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
+        self.video = cv2.VideoWriter(os.path.join(self.dir_path, self.rootfile2, "BattleVid.mp4"), cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
         self.buildframe()
         fullreactions = []
         for message in self.commandmessages:
@@ -410,7 +450,7 @@ class GameCommands:
                 #self.fullevents.append(self.events3)
         self.video.release()
         del self.video
-        newGridVideo = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, self.rootfile, 'BattleVid.mp4')))
+        newGridVideo = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, self.rootfile2, 'BattleVid.mp4')))
         if hasattr(self, 'GridVideo'):
             await self.GridVideo.delete()
         self.GridVideo = newGridVideo
@@ -622,6 +662,8 @@ class GameCommands:
                         #print('Kill')
                         GameRound.deaths.append(newtank)
                         GameRound.explosions.append((x, y))
+                        print("extracheck")
+                        self.pandaTankKill(tank.username, self.tanklist[newtank].username)
                         hit = True
             else:
                 x, y = x + direction[0], y + direction[1]
@@ -782,7 +824,7 @@ class GameCommands:
                         self.tanklist[user].dead = True
                 '''
                 oldtank = self.tanklist[user]
-                newtank = Tank(oldtank.x, oldtank.y, oldtank.rotation, oldtank.turrent, oldtank.name, oldtank.color)
+                newtank = Tank(oldtank.x, oldtank.y, oldtank.rotation, oldtank.turrent, oldtank.name, oldtank.displayname, oldtank.username, oldtank.color)
                 newtank.dead = oldtank.dead or oldtank.nowdead
                 self.tanklist[user] = self.subShiftTanks(newtank, self.Round1.actions[user])
                 
@@ -794,7 +836,7 @@ class GameCommands:
                         self.tanklist[user].dead = True
                 '''
                 oldtank = self.tanklist[user]
-                newtank = Tank(oldtank.x, oldtank.y, oldtank.rotation, oldtank.turrent, oldtank.name, oldtank.color)
+                newtank = Tank(oldtank.x, oldtank.y, oldtank.rotation, oldtank.turrent, oldtank.name, oldtank.displayname, oldtank.username, oldtank.color)
                 newtank.dead = oldtank.dead or oldtank.nowdead
                 self.tanklist[user] = self.subShiftTanks(newtank, self.Round2.actions[user])
                 
@@ -806,7 +848,7 @@ class GameCommands:
                         self.tanklist[user].dead = True
                 '''
                 oldtank = self.tanklist[user]
-                newtank = Tank(oldtank.x, oldtank.y, oldtank.rotation, oldtank.turrent, oldtank.name, oldtank.color)
+                newtank = Tank(oldtank.x, oldtank.y, oldtank.rotation, oldtank.turrent, oldtank.name, oldtank.displayname, oldtank.username, oldtank.color)
                 newtank.dead = oldtank.dead or oldtank.nowdead
                 self.tanklist[user] = self.subShiftTanks(newtank, self.Round3.actions[user])
 
@@ -846,10 +888,10 @@ class GameCommands:
         self.explosions = []
 
     def buildraw(self):
-        img1 = cv2.imread(os.path.join(self.dir_path, self.rootfile, 'Grid.jpg'))
+        img1 = cv2.imread(os.path.join(self.dir_path, self.rootfile2, 'Grid.jpg'))
         for tank in self.tanklist.values():
             originx, originy = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset
-            self.addText(img1, tank.name.name, tank.color, originx, originy)
+            self.addText(img1, tank.displayname, tank.color, originx, originy)
         for tank in self.tanklist.values():
             originx, originy, rotation, turrent = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset, tank.rotation + tank.rotationOffset, tank.turrent + tank.turrentOffset
             self.addTank(img1, originx, originy, rotation, turrent, tank.color, tank.dead)
@@ -870,7 +912,7 @@ class GameCommands:
         return img1
 
     async def generatefullvideo2(self):
-        self.video = cv2.VideoWriter(os.path.join(self.dir_path, self.rootfile, "BattleLog.mp4"), cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
+        self.video = cv2.VideoWriter(os.path.join(self.dir_path, self.rootfile2, "BattleLog.mp4"), cv2.VideoWriter_fourcc(*'avc1'), self.fps, (self.height, self.width))
         self.buildframe2()
         for GRound in self.GameRounds[1:]:
             if len(GRound.actions) > 0:
@@ -881,7 +923,7 @@ class GameCommands:
                     self.buildframe2()
                 for user in GRound.tanks.keys():
                     oldtank = self.beginningGrid[user]
-                    newtank = Tank(oldtank.x, oldtank.y, oldtank.rotation, oldtank.turrent, oldtank.name, oldtank.color)
+                    newtank = Tank(oldtank.x, oldtank.y, oldtank.rotation, oldtank.turrent, oldtank.name, oldtank.displayname, oldtank.username, oldtank.color)
                     newtank.dead = oldtank.dead or oldtank.nowdead
                     newtank.nowdead = oldtank.nowdead or oldtank.dead
                     if user in GRound.actions.keys():
@@ -906,17 +948,17 @@ class GameCommands:
         '''
         self.video.release()
         del self.video
-        await self.videochannel.send(file = discord.File(os.path.join(self.dir_path, self.rootfile, 'BattleLog.mp4')))
+        await self.videochannel.send(file = discord.File(os.path.join(self.dir_path, self.rootfile2, 'BattleLog.mp4')))
 
     def buildframe2(self):
         self.video.write(self.buildraw2())
         self.explosions = []
 
     def buildraw2(self):
-        img1 = cv2.imread(os.path.join(self.dir_path, self.rootfile, 'Grid.jpg'))
+        img1 = cv2.imread(os.path.join(self.dir_path, self.rootfile2, 'Grid.jpg'))
         for tank in self.beginningGrid.values():
             originx, originy = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset
-            self.addText(img1, tank.name.name, tank.color, originx, originy)
+            self.addText(img1, tank.name.display_name, tank.color, originx, originy)
         for tank in self.beginningGrid.values():
             originx, originy, rotation, turrent = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset, tank.rotation + tank.rotationOffset, tank.turrent + tank.turrentOffset
             self.addTank(img1, originx, originy, rotation, turrent, tank.color, tank.dead)
@@ -943,6 +985,65 @@ class GameCommands:
         await self.GridImage.delete()
         del self.GridImage
         await self.finalmessage.delete()
+
+    def pandaTankKill(self, attacker, defender):
+        df = pd.read_csv(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', 'MasterTankList.csv'), sep=';', index_col='Tanks')
+        df.loc[attacker, 'Kills'] += 1
+        df.loc[defender, 'Deaths'] += 1
+        df.loc[defender, 'Losses'] += 1
+        df.loc[defender, 'Last Game'] = datetime.datetime.now().strftime("%x %X")
+        df1 = df.to_csv(sep=';')
+        f = open(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', 'MasterTankList.csv'), 'w')
+        f.write(df1)
+        f.close
+        df = pd.read_csv(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', '{}.csv'.format(attacker)), sep=';', index_col='Tanks')
+        if defender in df.index.values:
+            df.loc[defender, 'Kills'] += 1
+            df1 = df.to_csv(sep=';')
+            f = open(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', '{}.csv'.format(attacker)), 'w')
+            f.write(df1)
+            f.close
+        else:
+            df1 = pd.DataFrame({'Tanks':[defender], 'Kills':[1], 'Killed':[0]}).set_index('Tanks')
+            df1.to_csv(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', '{}.csv'.format(attacker)), mode='a', header=False, sep=';')
+        df = pd.read_csv(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', '{}.csv'.format(defender)), sep=';', index_col='Tanks')
+        if defender in df.index.values:
+            df.loc[attacker, 'Killed'] += 1
+            df1 = df.to_csv(sep=';')
+            f = open(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', '{}.csv'.format(defender)), 'w')
+            f.write(df1)
+            f.close
+        else:
+            df1 = pd.DataFrame({'Tanks':[attacker], 'Kills':[0], 'Killed':[1]}).set_index('Tanks')
+            df1.to_csv(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', '{}.csv'.format(defender)), mode='a', header=False, sep=';')
+
+    def pandaTankWin(self, winner):
+        df = pd.read_csv(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', 'MasterTankList.csv'), sep=';', index_col='Tanks')
+        df.loc[winner, 'Wins'] += 1
+        df.loc[winner, 'Last Game'] = datetime.datetime.now().strftime("%x %X")
+        df1 = df.to_csv(sep=';')
+        f = open(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', 'MasterTankList.csv'), 'w')
+        f.write(df1)
+        f.close
+
+    def pandaCheckUser(self, user):
+        if os.path.isfile(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', 'MasterTankList.csv')):
+            df = pd.read_csv(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', 'MasterTankList.csv'), sep=';', index_col='Tanks')
+            if not user in df.index.values:
+                df1 = pd.DataFrame({'Tanks':[user], 'Kills':[0], 'Deaths':[0], 'Wins':[0], 'Losses':[0], 'Last Game':[np.nan]}).set_index('Tanks')
+                df1.to_csv(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', 'MasterTankList.csv'), mode='a', header=False, sep=';')
+        else:
+            f = open(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', 'MasterTankList.csv'), 'w')
+            df = pd.DataFrame({'Tanks':[user], 'Kills':[0], 'Deaths':[0], 'Wins':[0], 'Losses':[0], 'Last Game':[np.nan]}).set_index('Tanks').to_csv(sep=';')
+            self.addlog(df)
+            f.write(df)
+            f.close
+        if not os.path.isfile(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', '{}.csv'.format(user))):
+            f = open(os.path.join(self.dir_path, self.rootfile, 'pandaFiles', '{}.csv'.format(user)), 'w')
+            df = pd.DataFrame({'Tanks':[], 'Kills':[], 'Killed':[]}).set_index('Tanks').to_csv(sep=';')
+            f.write(df)
+            f.close
+
 
 class GameRound:
     def __init__(self):
