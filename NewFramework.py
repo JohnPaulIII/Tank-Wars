@@ -28,7 +28,21 @@ class GameCommands:
         self.fireframemax = 5
         self.frametranslation = self.gridsize / self.steps
         self.framerotation = 6
-        self.coloremojis = ["\U0001F7E9","\U0001F7E6","\U0001F7E5"]
+        #self.coloremojis = ["\U0001F7E9","\U0001F7E6","\U0001F7E5"]
+        self.coloremojis = {
+            "\U0001F7E5":"Red",
+            "\U0001F7E6":"Blue",
+            "\U0001F7E9":"Green",
+            "\U0001F338":"Pink",
+            "\U0001F7E7":"Orange",
+            "\U0001F7E8":"Yellow",
+            "\U00002B1B":"Black",
+            "\U00002B1C":"White",
+            "\U0001F7EA":"Purple",
+            "\U0001F7EB":"Brown",
+            "\U0001F99A":"Cyan",
+            "\U0001F350":"Lime",
+        }
         self.commandemojis = ["\U0001F4A5", "\U000025C0", "\U0001F53C", "\U000025B6", "\U0001F53D"]
         self.subcommandemojis = ["\U000025C0", "\U0001F53C", "\U000025B6", "\U0001F53D"]
         self.ctext = {
@@ -73,10 +87,28 @@ class GameCommands:
         if not path.exists(os.path.join(self.dir_path, self.rootfile, 'pandaFiles')):
             os.mkdir(os.path.join(self.dir_path, self.rootfile, 'pandaFiles'))
         self.buildGrid()
+        self.addlog('Game Start')
+        self.generateSpriteSheets()
+
+    def generateSpriteSheets(self):
+        self.fireimages = {}
+        for i in ['000', '090', '180', '270']:
+            self.fireimages[i] = {}
+            for j in ['1', '2', '3', '4']:
+                self.fireimages[i][j] = cv2.imread(os.path.join(self.dir_path, 'assets', 'Fire_{}_{}.jpg'.format(j, i)))
+        self.addlog('Fire Images Generated')
+        self.explosionimages = {}
+        for i in ['1', '2', '3', '4', '5']:
+            self.explosionimages[i] = cv2.imread(os.path.join(self.dir_path, 'assets', 'Explosion_{}.jpg'.format(i)))
+        self.addlog('Explosion Images Generated')
+        self.tankimages = {}
+        for i in ['Dead', 'Red', 'Blue', 'Green', 'Pink', 'Orange', 'Yellow', 'Black', 'White', 'Purple', 'Brown', 'Cyan', 'Lime']:
+            self.tankimages[i] = cv2.imread(os.path.join(self.dir_path, 'assets', '{}_Tank_Sprites.bmp'.format(i)))
+        self.addlog('Tank Images Generated')
 
     def getCommandMessages(self):
         if self.gamestage == 1:
-            return ([self.startgamemessage], self.coloremojis)
+            return ([self.startgamemessage], self.coloremojis.keys())
         elif self.gamestage == 2:
             return (self.commandmessages, self.commandemojis)
         else:
@@ -146,7 +178,7 @@ class GameCommands:
 
         self.addAllWalls(gridimage)
 
-        cv2.imwrite(os.path.join(self.dir_path, self.rootfile2, 'Grid.jpg'), gridimage)
+        cv2.imwrite(os.path.join(self.dir_path, self.rootfile2, 'Grid.bmp'), gridimage)
 
     def addAllWalls(self, img1):
         vwalls = [Wall(4,0),Wall(0,1),Wall(8,1),Wall(1,2),Wall(7,2),Wall(1,3),Wall(7,3),Wall(2,4),Wall(6,4),Wall(2,5),Wall(6,5),Wall(1,6),Wall(7,6),Wall(1,7),Wall(7,7),Wall(0,8),Wall(8,8),Wall(4,9)]
@@ -180,7 +212,7 @@ class GameCommands:
                 os.remove(os.path.join(self.rootfile2, str(int(self.gamechannel.id)) + "_" + str(self.gamenum) + ".txt"))
         self.gamestage = 1
         self.startgamemessage = await self.gamechannel.send("React below to join the next game:")
-        for emoji in self.coloremojis:
+        for emoji in self.coloremojis.keys():
             await self.startgamemessage.add_reaction(emoji)
 
     async def checkPlayerCount(self):
@@ -188,7 +220,7 @@ class GameCommands:
             reactionset = await self.gamechannel.fetch_message(self.startgamemessage.id)
             reactions = reactionset.reactions
             fullList = []
-            for emoji in self.coloremojis:
+            for emoji in self.coloremojis.keys():
                 for reaction in reactions:
                     if reaction.emoji == emoji:
                         users = await reaction.users().flatten()
@@ -204,7 +236,6 @@ class GameCommands:
         self.gamestage = 2
         message = await self.gamechannel.fetch_message(self.startgamemessage.id)
         reactions = message.reactions
-        colorset = {"\U0001F7E9":"Green","\U0001F7E6":"Blue","\U0001F7E5":"Red"}
         self.clearlist()
         taken = []
         self.beginningGrid = {}
@@ -220,7 +251,7 @@ class GameCommands:
                             taken.append(newrand)
                             solved = True
                     self.addlog('Check2')
-                    print(user.id)
+                    #print(user.id)
                     self.addlog(user.id)
                     rotation = int(randrange(0,360,90))
                     self.GameRounds[0].newtankpositions[newrand] = [user.name]
@@ -229,8 +260,8 @@ class GameCommands:
                     usercontainer = await self.gamechannel.guild.fetch_member(user.id)
                     displayname = ''.join(e for e in usercontainer.display_name if e.isalnum() or e == ' ')
                     username = usercontainer.name + "#" + usercontainer.discriminator
-                    self.tanklist[user.name] = Tank(x, y, rotation, rotation, user, displayname, username, colorset[react.emoji])
-                    self.beginningGrid[user.name] = Tank(x, y, rotation, rotation, user, displayname, username, colorset[react.emoji])
+                    self.tanklist[user.name] = Tank(x, y, rotation, rotation, user, displayname, username, self.coloremojis[react.emoji])
+                    self.beginningGrid[user.name] = Tank(x, y, rotation, rotation, user, displayname, username, self.coloremojis[react.emoji])
                     self.pandaCheckUser(username)
                     self.addlog('Check3')
         await message.delete()
@@ -259,10 +290,11 @@ class GameCommands:
 
     async def buildImage(self):
         image = self.buildraw()
-        cv2.imwrite(os.path.join(self.dir_path, self.rootfile2, 'BattleGrid.jpg'),image)
+        filename = 'BattleGrid.png'
+        cv2.imwrite(os.path.join(self.dir_path, self.rootfile2, filename),image)
         if hasattr(self, 'GridImage'):
             await self.GridImage.delete()
-        self.GridImage = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, self.rootfile2, 'BattleGrid.jpg')))
+        self.GridImage = await self.gamechannel.send(file = discord.File(os.path.join(self.dir_path, self.rootfile2, filename)))
 
     def addText(self, img1, text, color, originx, originy):
         #colorwheel = {"Red":(44,31,120), "Green":(80,155,75), "Blue":(163,77,15)}
@@ -283,38 +315,22 @@ class GameCommands:
             angle2d -= 360
         while angle2d < 0:
             angle2d += 360
-        if int(angle1d) > 180:
-            angle1 = str(360 - int(angle1d))
-            rev1 = True
-        else:
-            angle1 = str(int(angle1d))
-            rev1 = False
-        while len(angle1) < 3:
-            angle1 = '0' + angle1
-        if int(angle2d) > 180:
-            angle2 = str(360 - int(angle2d))
-            rev2 = True
-        else:
-            angle2 = str(int(angle2d))
-            rev2 = False
-        while len(angle2) < 3:
-            angle2 = '0' + angle2
         if dead:
-            self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Tank_Base_Dead{}.jpg'.format(angle1)))
-            self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Tank_Turrent_Dead{}.jpg'.format(angle2)))
-            img2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Base_Dead{}.jpg'.format(angle1)))
-            img3 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Turrent_Dead{}.jpg'.format(angle2)))
-            threshold = 180
+            self.addlog("Query image: " + 'Tank_Base_Dead_{}'.format(str(angle1d)))
+            self.addlog("Query image: " + 'Tank_Turrent_Dead_{}'.format(str(angle2d)))
+            x = int(angle1d * 63 / 6)
+            img2 = self.tankimages['Dead'][0 : 63, x : x + 60].copy() #cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Base_Dead{}.jpg'.format(angle1)))
+            x = int(angle2d * 63 / 6)
+            img3 = self.tankimages['Dead'][63 : 126, x : x + 60].copy() #cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Turrent_Dead{}.jpg'.format(angle2)))
+            threshold = 254.5
         else:
-            self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Tank_Base_{}{}.jpg'.format(color, angle1)))
-            self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Tank_Turrent_{}{}.jpg'.format(color, angle2)))
-            img2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Base_{}{}.jpg'.format(color, angle1)))
-            img3 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Turrent_{}{}.jpg'.format(color, angle2)))
-            threshold = 140
-        if rev1:
-            img2 = cv2.flip(img2,1)
-        if rev2:
-            img3 = cv2.flip(img3,1)
+            self.addlog("Query image: " + 'Tank_Base_{}_{}'.format(color, str(angle1d)))
+            self.addlog("Query image: " + 'Tank_Turrent_{}_{}'.format(color, str(angle2d)))
+            x = int(angle1d * 63 / 6)
+            img2 = self.tankimages[color][0 : 63, x : x + 63].copy() #cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Base_{}{}.jpg'.format(color, angle1)))
+            x = int(angle2d * 63 / 6)
+            img3 = self.tankimages[color][63 : 126, x : x + 63].copy() #cv2.imread(os.path.join(self.dir_path, 'assets', 'Tank_Turrent_{}{}.jpg'.format(color, angle2)))
+            threshold = 254.5
         self.addImage(img1, img2, gridx, gridy, threshold)
         self.addImage(img1, img3, gridx, gridy, threshold)
 
@@ -340,13 +356,13 @@ class GameCommands:
             gridx -= 4
             gridy -= 33
             angletext = '000'
-        self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Fire_{}_{}.jpg'.format(str(int(frame)), angletext)))
-        img2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Fire_{}_{}.jpg'.format(str(int(frame)), angletext)))
+        self.addlog("Query image: " + 'Fire_{}_{}'.format(str(int(frame)), angletext))
+        img2 = self.fireimages[angletext][str(frame)].copy() #cv2.imread(os.path.join(self.dir_path, 'assets', 'Fire_{}_{}.jpg'.format(str(int(frame)), angletext)))
         self.addImage(img1, img2, gridx, gridy, 200)
 
     def addExplosion(self, img1, gridx, gridy, frame):
-        self.addlog("Query image: " + os.path.join(self.dir_path, 'assets', 'Explosion_{}.jpg'.format(str(int(frame)))))
-        img2 = cv2.imread(os.path.join(self.dir_path, 'assets', 'Explosion_{}.jpg'.format(str(int(frame)))))
+        self.addlog("Query image: " + 'Explosion_{}'.format(str(int(frame))))
+        img2 = self.explosionimages[str(frame)].copy() #cv2.imread(os.path.join(self.dir_path, 'assets', 'Explosion_{}.jpg'.format(str(int(frame)))))
         self.addImage(img1,img2,gridx,gridy)
 
     def addImage(self, img1, img2, originx, originy, thresholdnum = 140):
@@ -356,14 +372,20 @@ class GameCommands:
 
         # Now create a mask of logo and create its inverse mask also
         img2gray = cv2.cvtColor(img2,cv2.COLOR_BGR2GRAY)
+        #mask = cv2.threshold(img2gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)[1]
+        #img2gray = cv2.cvtColor(mask,cv2.COLOR_BGR2GRAY)
         mask = cv2.threshold(img2gray, thresholdnum, 255, cv2.THRESH_BINARY)[1]
         mask_inv = cv2.bitwise_not(mask)
+        kernel5 = np.ones((5,5),np.uint8)
+        #kernel9 = np.ones((9,9),np.uint8)
+        #opening = cv2.morphologyEx(mask_inv, cv2.MORPH_OPEN, kernel9)
+        erosion = cv2.erode(mask_inv,kernel5,iterations = 1)
 
         # Now black-out the area of logo in ROI
         img1_bg = cv2.bitwise_and(roi,roi,mask = mask)
 
         # Take only region of logo from logo image.
-        img2_fg = cv2.bitwise_and(img2,img2,mask = mask_inv)
+        img2_fg = cv2.bitwise_and(img2,img2,mask = erosion)
 
         # Put logo in ROI and modify the main image
         dst = cv2.add(img1_bg,img2_fg)
@@ -888,7 +910,7 @@ class GameCommands:
         self.explosions = []
 
     def buildraw(self):
-        img1 = cv2.imread(os.path.join(self.dir_path, self.rootfile2, 'Grid.jpg'))
+        img1 = cv2.imread(os.path.join(self.dir_path, self.rootfile2, 'Grid.bmp'))
         for tank in self.tanklist.values():
             originx, originy = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset
             self.addText(img1, tank.displayname, tank.color, originx, originy)
@@ -955,7 +977,7 @@ class GameCommands:
         self.explosions = []
 
     def buildraw2(self):
-        img1 = cv2.imread(os.path.join(self.dir_path, self.rootfile2, 'Grid.jpg'))
+        img1 = cv2.imread(os.path.join(self.dir_path, self.rootfile2, 'Grid.bmp'))
         for tank in self.beginningGrid.values():
             originx, originy = 143 + (90 * tank.x) + tank.xOffset, 141 + (90 * tank.y) + tank.yOffset
             self.addText(img1, tank.name.display_name, tank.color, originx, originy)
